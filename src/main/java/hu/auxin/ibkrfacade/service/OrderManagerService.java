@@ -1,16 +1,22 @@
 package hu.auxin.ibkrfacade.service;
 
-import com.ib.client.*;
-import hu.auxin.ibkrfacade.data.holder.OrderHolder;
-import hu.auxin.ibkrfacade.twssample.OrderSamples;
-import org.springframework.context.annotation.Scope;
-import org.springframework.lang.NonNull;
-import org.springframework.stereotype.Service;
-
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Service;
+
+import com.ib.client.Contract;
+import com.ib.client.EClientSocket;
+import com.ib.client.Order;
+import com.ib.client.OrderState;
+import com.ib.client.Types;
+
+import hu.auxin.ibkrfacade.data.holder.OrderHolder;
+import hu.auxin.ibkrfacade.twssample.OrderSamples;
 
 @Service
 @Scope("singleton")
@@ -20,7 +26,6 @@ public class OrderManagerService {
 
     private Map<Integer, OrderHolder> orders = new HashMap<>();
 
-    @NonNull
     private EClientSocket client;
 
     /**
@@ -33,8 +38,8 @@ public class OrderManagerService {
         client.placeOrder(orderId++, contract, order);
     }
 
-    public void placeLimitOrder(Contract contract, Types.Action action, double quantity, double limitPrice) {
-        Order order = OrderSamples.LimitOrder(action.getApiString(), quantity, limitPrice);
+    public void placeLimitOrder(Contract contract, Types.Action action, double quantity, BigDecimal limitPrice) {
+        Order order = OrderSamples.LimitOrder(action.getApiString(), quantity, limitPrice.doubleValue());
         client.placeOrder(orderId++, contract, order);
     }
 
@@ -43,8 +48,10 @@ public class OrderManagerService {
         client.placeOrder(orderId++, contract, order);
     }
 
-    public void placeStopLimitOrder(Contract contract, Types.Action action, double quantity, double stopPrice, double limitPrice) {
-        Order order = OrderSamples.StopLimit(action.getApiString(), quantity, limitPrice, stopPrice);
+    public void placeStopLimitOrder(Contract contract, Types.Action action, double quantity, BigDecimal stopPrice,
+            BigDecimal limitPrice) {
+        Order order = OrderSamples.StopLimit(action.getApiString(), quantity, limitPrice.doubleValue(),
+                stopPrice.doubleValue());
         client.placeOrder(orderId++, contract, order);
     }
 
@@ -69,9 +76,10 @@ public class OrderManagerService {
      * @param avgFillPrice
      * @param lastFillPrice
      */
-    public void changeOrderStatus(int permId, String status, double filled, double remaining, double avgFillPrice, double lastFillPrice) {
+    public void changeOrderStatus(int permId, String status, double filled, double remaining, double avgFillPrice,
+            double lastFillPrice) {
         OrderHolder orderHolder = orders.get(permId);
-        if(orderHolder != null) {
+        if (orderHolder != null) {
             orderHolder.getOrderState().status(status);
             orderHolder.getOrder().filledQuantity(filled);
         } else {

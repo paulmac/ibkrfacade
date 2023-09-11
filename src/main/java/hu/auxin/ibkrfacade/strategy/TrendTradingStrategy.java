@@ -1,7 +1,15 @@
 package hu.auxin.ibkrfacade.strategy;
 
+import java.math.BigDecimal;
+import java.util.Date;
+
+import org.springframework.context.annotation.DependsOn;
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
+
 import com.ib.client.TickType;
 import com.ib.client.Types;
+
 import hu.auxin.ibkrfacade.data.TimeSeriesHandler;
 import hu.auxin.ibkrfacade.data.holder.ContractHolder;
 import hu.auxin.ibkrfacade.data.holder.PositionHolder;
@@ -9,44 +17,44 @@ import hu.auxin.ibkrfacade.data.holder.PriceHolder;
 import hu.auxin.ibkrfacade.service.ContractManagerService;
 import hu.auxin.ibkrfacade.service.OrderManagerService;
 import hu.auxin.ibkrfacade.service.PositionManagerService;
-import jakarta.annotation.PostConstruct;
+import lombok.Data;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import redis.clients.jedis.timeseries.TSElement;
-
-import org.springframework.context.annotation.DependsOn;
-import org.springframework.context.annotation.Scope;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
-
-import java.util.Date;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Sample trading strategy, don't even think about using it real conditions!
  */
 @Slf4j
+@Data
 @Component
 @DependsOn("TWS")
 @Scope("singleton")
 public class TrendTradingStrategy {
 
+    @NonNull
     private TimeSeriesHandler timeSeriesHandler;
+    @NonNull
     private OrderManagerService orderManagerService;
+    @NonNull
     private PositionManagerService positionManagerService;
+    @NonNull
     private ContractManagerService contractManagerService;
 
     private final int conid = 265598; // AAPL
     private ContractHolder apple;
 
-    public TrendTradingStrategy(OrderManagerService orderManagerService, PositionManagerService positionManagerService,
-            TimeSeriesHandler timeSeriesHandler, ContractManagerService contractManagerService) {
-        this.orderManagerService = orderManagerService;
-        this.positionManagerService = positionManagerService;
-        this.contractManagerService = contractManagerService;
-        this.timeSeriesHandler = timeSeriesHandler;
-    }
+    // public TrendTradingStrategy(OrderManagerService orderManagerService,
+    // PositionManagerService positionManagerService,
+    // TimeSeriesHandler timeSeriesHandler, ContractManagerService
+    // contractManagerService) {
+    // this.orderManagerService = orderManagerService;
+    // this.positionManagerService = positionManagerService;
+    // this.contractManagerService = contractManagerService;
+    // this.timeSeriesHandler = timeSeriesHandler;
+    // }
 
-//    @PostConstruct
+    // @PostConstruct
     private void init() {
         this.apple = contractManagerService.getContractHolder(conid);
         int streamId = contractManagerService.subscribeMarketData(apple.getContract());
@@ -54,7 +62,8 @@ public class TrendTradingStrategy {
                                                  // because the stream was started later than the request
     }
 
-//    @Scheduled(cron = "0/10 * 9-16 * * ?", zone = "America/New_York") // job will run every 10 seconds (0/10) during the hours of 9am to 4pm
+    // @Scheduled(cron = "0/10 * 9-16 * * ?", zone = "America/New_York") // job will
+    // run every 10 seconds (0/10) during the hours of 9am to 4pm
     private synchronized void checkForTradingSignal() {
         if (apple == null) {
             return;
@@ -90,7 +99,7 @@ public class TrendTradingStrategy {
         }
     }
 
-//    @Scheduled(fixedRate = 5, initialDelay = 15, timeUnit = TimeUnit.SECONDS)
+    // @Scheduled(fixedRate = 5, initialDelay = 15, timeUnit = TimeUnit.SECONDS)
     private synchronized void handleClose() {
         PositionHolder positionHolder = positionManagerService.getPositionByContract(apple.getContract());
         if (positionHolder != null) {
@@ -110,8 +119,8 @@ public class TrendTradingStrategy {
                             isShort ? Types.Action.BUY : Types.Action.SELL, positionHolder.getQuantity());
                 } else if (lastPrice.getBid() > positionHolder.getAvgPrice() + maxChange) {
                     // we have some unrealized gains, set a stop loss
-                    double activationPrice = lastPrice.getBid() - stopLoss;
-                    double limitPrice = lastPrice.getBid() - stopLoss - 0.5;
+                    BigDecimal activationPrice = BigDecimal.valueOf(lastPrice.getBid() - stopLoss);
+                    BigDecimal limitPrice = BigDecimal.valueOf(lastPrice.getBid() - stopLoss - 0.5);
                     orderManagerService.placeStopLimitOrder(apple.getContract(),
                             isShort ? Types.Action.BUY : Types.Action.SELL, positionHolder.getQuantity(),
                             activationPrice, limitPrice);

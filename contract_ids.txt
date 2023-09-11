@@ -1,0 +1,23 @@
+"permId": 599693854,
+
+"m_conid": 143916318,
+"m_symbol": "EUR",
+"m_secType": "CFD",
+
+
+@ConfigurationProperties(prefix = "contract.properties.conid.eur")
+@Scope("singleton")
+public class ContractManagerService {
+
+    public Properties props;
+}
+
+
+
+Non Exec Director
+150K + Super
+Profit Share 20%
+
+C:\Users\paulm\Documents\GitHub\redis-om-spring-skeleton-app\src
+C:\Users\paulm\Documents\GitHub\redis-om-spring-skeleton-app\..\ibkrfacade-fork\src
+

@@ -1,8 +1,18 @@
 package hu.auxin.ibkrfacade.service;
 
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+
+import org.springframework.context.annotation.DependsOn;
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
 import com.ib.client.Contract;
 import com.ib.client.ContractDetails;
 import com.ib.client.TickType;
+
 import hu.auxin.ibkrfacade.TWS;
 import hu.auxin.ibkrfacade.TwsResultHolder;
 import hu.auxin.ibkrfacade.data.ContractRepository;
@@ -10,36 +20,43 @@ import hu.auxin.ibkrfacade.data.TimeSeriesHandler;
 import hu.auxin.ibkrfacade.data.holder.ContractHolder;
 import hu.auxin.ibkrfacade.data.holder.Option;
 import hu.auxin.ibkrfacade.data.holder.PriceHolder;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Scope;
-import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
+import lombok.Data;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import redis.clients.jedis.timeseries.TSElement;
-
-import java.util.Collection;
-import java.util.List;
-import java.util.Optional;
 
 /**
  * Contract related operations. The service acts as a bridge between the TWS
  * itself and the other parts of the system,
  * eg. the REST API or the strategy implementations.
  */
+@Data
+@Slf4j
 @Service
+// @ConfigurationProperties(prefix = "contract.properties.conid.eur")
+@DependsOn("TWS")
 @Scope("singleton")
 public class ContractManagerService {
 
+    // @NonNull
+    // private Properties props;
+
+    @NonNull
     private TWS tws;
 
+    @NonNull
     private final TimeSeriesHandler timeSeriesHandler;
+
+    @NonNull
     private final ContractRepository contractRepository;
 
-    @Autowired
-    ContractManagerService(TWS tws, TimeSeriesHandler timeSeriesHandler, ContractRepository contractRepository) {
-        this.tws = tws;
-        this.timeSeriesHandler = timeSeriesHandler;
-        this.contractRepository = contractRepository;
-    }
+    // public void printProperties() {
+    // if (props != null) {
+    // props.forEach((key, value) -> log.info(key + "=" + value));
+    // } else {
+    // log.info("Properties not loaded.");
+    // }
+    // }
 
     public List<Contract> searchContract(String search) {
         TwsResultHolder resultHolder = tws.searchContract(search);
@@ -67,7 +84,7 @@ public class ContractManagerService {
 
     /**
      * Returns the latest available ask and bid price for the given conid
-     * 
+     *
      * @param conid
      * @return
      */
@@ -79,7 +96,7 @@ public class ContractManagerService {
 
     /**
      * Returns the latest available ask and bid price for the given Contract
-     * 
+     *
      * @param contract
      * @return
      */
@@ -91,7 +108,7 @@ public class ContractManagerService {
 
     /**
      * Getting the option chain for an underlying instrument
-     * 
+     *
      * @param underlyingConid
      * @return
      */

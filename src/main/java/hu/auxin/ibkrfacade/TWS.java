@@ -1,26 +1,64 @@
 package hu.auxin.ibkrfacade;
 
-import com.ib.client.*;
-import hu.auxin.ibkrfacade.data.ContractRepository;
-import hu.auxin.ibkrfacade.data.TimeSeriesHandler;
-import hu.auxin.ibkrfacade.data.holder.ContractHolder;
-import hu.auxin.ibkrfacade.data.holder.Option;
-import hu.auxin.ibkrfacade.data.holder.PositionHolder;
-import hu.auxin.ibkrfacade.service.OrderManagerService;
-import hu.auxin.ibkrfacade.service.PositionManagerService;
-import jakarta.annotation.PostConstruct;
-import lombok.extern.slf4j.Slf4j;
+import java.text.DecimalFormat;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
+
+import com.ib.client.Bar;
+import com.ib.client.CommissionReport;
+import com.ib.client.Contract;
+import com.ib.client.ContractDescription;
+import com.ib.client.ContractDetails;
+import com.ib.client.DeltaNeutralContract;
+import com.ib.client.DepthMktDataDescription;
+import com.ib.client.EClientSocket;
+import com.ib.client.EJavaSignal;
+import com.ib.client.EReaderSignal;
+import com.ib.client.EWrapper;
+import com.ib.client.EWrapperMsgGenerator;
+import com.ib.client.Execution;
+import com.ib.client.FamilyCode;
+import com.ib.client.HistogramEntry;
+import com.ib.client.HistoricalTick;
+import com.ib.client.HistoricalTickBidAsk;
+import com.ib.client.HistoricalTickLast;
+import com.ib.client.NewsProvider;
+import com.ib.client.Order;
+import com.ib.client.OrderState;
+import com.ib.client.PriceIncrement;
+import com.ib.client.SoftDollarTier;
+import com.ib.client.TickAttrib;
+import com.ib.client.TickAttribBidAsk;
+import com.ib.client.TickAttribLast;
+import com.ib.client.TickType;
+import com.ib.client.Types;
+
+import hu.auxin.ibkrfacade.data.ContractRepository;
+import hu.auxin.ibkrfacade.data.TimeSeriesHandler;
+import hu.auxin.ibkrfacade.data.holder.ContractHolder;
+import hu.auxin.ibkrfacade.data.holder.Option;
+import hu.auxin.ibkrfacade.data.holder.PositionHolder;
+import hu.auxin.ibkrfacade.service.AsyncReaderService;
+import hu.auxin.ibkrfacade.service.OrderManagerService;
+import hu.auxin.ibkrfacade.service.PositionManagerService;
+import jakarta.annotation.PostConstruct;
+import lombok.Data;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import redis.clients.jedis.exceptions.JedisDataException;
 
-import java.text.DecimalFormat;
-import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
-
+@Data
 @Slf4j
 @Component
 @Scope("singleton")
@@ -32,51 +70,83 @@ public final class TWS implements EWrapper, TwsHandler {
     @Value("${ibkr.tws.port}")
     private int TWS_PORT;
 
-    private final TimeSeriesHandler timeSeriesHandler;
-    private final ContractRepository contractRepository;
-    private final OrderManagerService orderManagerService;
-    private final PositionManagerService positionManagerService;
+    // @Value("${ibkr.tws.host}")
+    // private final String TWS_HOST;
 
-    private final EReaderSignal readerSignal = new EJavaSignal();
-    private final EClientSocket client = new EClientSocket(this, readerSignal);
+    @Value("${ibkr.gw.host}")
+    private String GW_HOST;
+
+    @Value("${ibkr.tws.live.port}")
+    private int TWS_LIVE_PORT;
+
+    @Value("${ibkr.tws.paper.port}")
+    private int TWS_PAPER_PORT;
+
+    @Value("${ibkr.gw.live.port}")
+    private int GW_LIVE_PORT;
+
+    @Value("${ibkr.gw.paper.port}")
+    private int GW_PAPER_PORT;
+
+    @Value("${ibkr.platform.type}")
+    private String platformType;
+
+    @NonNull
+    private TimeSeriesHandler timeSeriesHandler;
+    @NonNull
+    private ContractRepository contractRepository;
+    @NonNull
+    private OrderManagerService orderManagerService;
+    @NonNull
+    private PositionManagerService positionManagerService;
+    @NonNull
+    private AsyncReaderService asyncReaderService;
+
+    private EReaderSignal readerSignal = new EJavaSignal();
+    private EClientSocket client = new EClientSocket(this, readerSignal);
     private final AtomicInteger autoIncrement = new AtomicInteger();
     private final TwsResultHandler twsResultHandler = new TwsResultHandler();
 
-    TWS(ContractRepository contractRepository, TimeSeriesHandler timeSeriesHandler,
-            OrderManagerService orderManagerService, PositionManagerService positionManagerService) {
-        this.timeSeriesHandler = timeSeriesHandler;
-        this.orderManagerService = orderManagerService;
-        this.positionManagerService = positionManagerService;
-        this.contractRepository = contractRepository;
-    }
-
     @PostConstruct
     private void connect() throws InterruptedException {
-        client.eConnect(TWS_HOST, TWS_PORT, 0);
 
-        final EReader reader = new EReader(client, readerSignal);
-        reader.start();
+        switch (platformType) {
+            case "TWS_LIVE":
+                client.eConnect(TWS_HOST, TWS_LIVE_PORT, 0);
+                break;
+            case "TWS_PAPER":
+                client.eConnect(TWS_HOST, TWS_PAPER_PORT, 0);
+                break;
+            case "GW_LIVE":
+                client.eConnect(GW_HOST, GW_LIVE_PORT, 0);
+                break;
+            case "GW_PAPER":
+                client.eConnect(GW_HOST, GW_PAPER_PORT, 0);
+                break;
+            default:
+                break;
+        }
 
-        // An additional thread is created in this program design to empty the messaging
-        // queue
-        new Thread(() -> {
-            while (client.isConnected()) {
-                readerSignal.waitForSignal();
-                try {
-                    reader.processMsgs();
-                } catch (Exception e) {
-                    log.error(e.getMessage());
-                }
-            }
-        }).start();
+        asyncReaderService.processMessages(client, readerSignal); // async
 
-        Thread.sleep(2000); // avoid "Ignoring API request 'jextend.cs' since API is not accepted." error
+        Thread.sleep(2000); // avoid "Ignoring API request 'jextend.cs' since API is
+        // not accepted." error
 
         client.reqPositions(); // subscribe to positions
         client.reqAutoOpenOrders(true); // subscribe to order changes
         client.reqAllOpenOrders(); // initial request for open orders
 
         orderManagerService.setClient(client);
+    }
+
+    public void reconnect(String platform) throws InterruptedException {
+        this.platformType = platform;
+        client.eDisconnect();
+        while (client.isConnected())
+            Thread.sleep(2000); // pause before reconnecting
+        readerSignal = new EJavaSignal();
+        client = new EClientSocket(this, readerSignal);
+        this.connect();
     }
 
     @Override
@@ -136,7 +206,7 @@ public final class TWS implements EWrapper, TwsHandler {
     @Override
     public Collection<Option> requestForOptionChain(Contract underlying) {
         final int currentId = autoIncrement.getAndIncrement();
-        client.reqSecDefOptParams(currentId, underlying.symbol(), "", //underlying.exchange(),
+        client.reqSecDefOptParams(currentId, underlying.symbol(), "", // underlying.exchange(),
                 underlying.secType().getApiString(), underlying.conid());
 
         TwsResultHolder resultHolder = twsResultHandler.getResult(currentId);
@@ -557,7 +627,8 @@ public final class TWS implements EWrapper, TwsHandler {
         for (Types.Right right : new Types.Right[] { Types.Right.Call, Types.Right.Put }) {
             for (String expiration : expirations) {
                 for (Double strike : strikes) {
-                    String optionSymbol = underlyingContractHolder.getContract().symbol() + " " + expiration + " " + right;
+                    String optionSymbol = underlyingContractHolder.getContract().symbol() + " " + expiration + " "
+                            + right;
                     Option option = new Option(optionSymbol, expiration, strike, right);
                     underlyingContractHolder.getOptionChain().add(option);
                 }
