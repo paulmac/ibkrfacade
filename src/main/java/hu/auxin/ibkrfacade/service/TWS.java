@@ -1,4 +1,4 @@
-package hu.auxin.ibkrfacade;
+package hu.auxin.ibkrfacade.service;
 
 import java.text.DecimalFormat;
 import java.util.ArrayList;
@@ -44,14 +44,11 @@ import com.ib.client.TickAttribLast;
 import com.ib.client.TickType;
 import com.ib.client.Types;
 
-import hu.auxin.ibkrfacade.data.ContractRepository;
-import hu.auxin.ibkrfacade.data.TimeSeriesHandler;
-import hu.auxin.ibkrfacade.data.holder.ContractHolder;
-import hu.auxin.ibkrfacade.data.holder.Option;
-import hu.auxin.ibkrfacade.data.holder.PositionHolder;
-import hu.auxin.ibkrfacade.service.AsyncReaderService;
-import hu.auxin.ibkrfacade.service.OrderManagerService;
-import hu.auxin.ibkrfacade.service.PositionManagerService;
+import hu.auxin.ibkrfacade.models.PositionHolder;
+import hu.auxin.ibkrfacade.models.TwsResultHolder;
+import hu.auxin.ibkrfacade.models.hashes.ContractHolder;
+import hu.auxin.ibkrfacade.models.json.Option;
+import hu.auxin.ibkrfacade.repositories.hashes.ContractRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import lombok.NonNull;
@@ -64,14 +61,29 @@ import redis.clients.jedis.exceptions.JedisDataException;
 @Scope("singleton")
 public final class TWS implements EWrapper, TwsHandler {
 
+    // public enum Platform {
+
+    // TWS_LIVE("TWS_LIVE"),
+    // TWS_PAPER("TWS_PAPER"),
+    // GW_LIVE("GW_LIVE"),
+    // GW_PAPER("GW_PAPER"),
+
+    // public final String pf;
+
+    // private Platform(String pf) {
+    // this.pf = pf;
+    // }
+
+    // public String getPf() {
+    // return pf;
+    // }
+    // }
+
     @Value("${ibkr.tws.host}")
     private String TWS_HOST;
 
     @Value("${ibkr.tws.port}")
     private int TWS_PORT;
-
-    // @Value("${ibkr.tws.host}")
-    // private final String TWS_HOST;
 
     @Value("${ibkr.gw.host}")
     private String GW_HOST;
@@ -89,14 +101,14 @@ public final class TWS implements EWrapper, TwsHandler {
     private int GW_PAPER_PORT;
 
     @Value("${ibkr.platform.type}")
-    private String platformType;
+    private String platform;
 
     @NonNull
     private TimeSeriesHandler timeSeriesHandler;
     @NonNull
     private ContractRepository contractRepository;
     @NonNull
-    private OrderManagerService orderManagerService;
+    private OrderManagerService ordersManagerService;
     @NonNull
     private PositionManagerService positionManagerService;
     @NonNull
@@ -108,9 +120,13 @@ public final class TWS implements EWrapper, TwsHandler {
     private final TwsResultHandler twsResultHandler = new TwsResultHandler();
 
     @PostConstruct
+    void init() {
+        log.info("🚀 ✅ Initialized {} ", this.getClass().getName());
+    }
+
     private void connect() throws InterruptedException {
 
-        switch (platformType) {
+        switch (platform) {
             case "TWS_LIVE":
                 client.eConnect(TWS_HOST, TWS_LIVE_PORT, 0);
                 break;
@@ -127,26 +143,35 @@ public final class TWS implements EWrapper, TwsHandler {
                 break;
         }
 
-        asyncReaderService.processMessages(client, readerSignal); // async
-
         Thread.sleep(2000); // avoid "Ignoring API request 'jextend.cs' since API is
         // not accepted." error
+
+        log.info("🚀 ✅ Connectted to {} ", client.connectedHost());
+        asyncReaderService.processMessages(client, readerSignal); // async
 
         client.reqPositions(); // subscribe to positions
         client.reqAutoOpenOrders(true); // subscribe to order changes
         client.reqAllOpenOrders(); // initial request for open orders
 
-        orderManagerService.setClient(client);
+        client.reqAccountSummary(GW_LIVE_PORT, TWS_HOST, GW_HOST);
+        ordersManagerService.setClient(client);
     }
 
-    public void reconnect(String platform) throws InterruptedException {
-        this.platformType = platform;
-        client.eDisconnect();
-        while (client.isConnected())
-            Thread.sleep(2000); // pause before reconnecting
+    public void connect(String platform) throws InterruptedException {
+
+        if (client.isConnected())
+            throw new InterruptedException("Client already Connected");
+        this.platform = platform;
         readerSignal = new EJavaSignal();
         client = new EClientSocket(this, readerSignal);
         this.connect();
+    }
+
+    public void disconnect() throws InterruptedException {
+        while (client.isConnected()) {
+            client.eDisconnect();
+            Thread.sleep(2000); // pause before releasing thread
+        }
     }
 
     @Override
@@ -174,8 +199,7 @@ public final class TWS implements EWrapper, TwsHandler {
         final int currentId = autoIncrement.getAndIncrement();
         client.reqContractDetails(currentId, contract);
         TwsResultHolder<ContractDetails> details = twsResultHandler.getResult(currentId);
-        Optional<ContractHolder> contractHolder = contractRepository.findById(details.getResult().conid());
-        contractHolder.ifPresent(holder -> {
+        contractRepository.findByConid(details.getResult().conid()).ifPresent(holder -> {
             holder.setDetails(details.getResult());
             // TODO save from ContractManager
             contractRepository.save(holder);
@@ -186,7 +210,7 @@ public final class TWS implements EWrapper, TwsHandler {
     @Override
     public int subscribeMarketData(Contract contract, boolean tickByTick) {
         final int currentId = autoIncrement.getAndIncrement();
-        Optional<ContractHolder> contractHolderOptional = contractRepository.findById(contract.conid());
+        Optional<ContractHolder> contractHolderOptional = contractRepository.findByConid(contract.conid());
         ContractHolder contractHolder = contractHolderOptional.orElse(new ContractHolder(contract));
         contractHolder.setStreamRequestId(currentId);
         contractRepository.save(contractHolder);
@@ -292,14 +316,14 @@ public final class TWS implements EWrapper, TwsHandler {
     public void orderStatus(int orderId, String status, double filled,
             double remaining, double avgFillPrice, int permId, int parentId,
             double lastFillPrice, int clientId, String whyHeld, double mktCapPrice) {
-        orderManagerService.changeOrderStatus(permId, status, filled, remaining, avgFillPrice, lastFillPrice);
+        ordersManagerService.changeOrderStatus(permId, status, filled, remaining, avgFillPrice, lastFillPrice);
     }
     // ! [orderstatus]
 
     // ! [openorder]
     @Override
     public void openOrder(int orderId, Contract contract, Order order, OrderState orderState) {
-        orderManagerService.setOrder(contract, order, orderState);
+        ordersManagerService.setOrder(contract, order, orderState);
     }
     // ! [openorder]
 
@@ -348,7 +372,7 @@ public final class TWS implements EWrapper, TwsHandler {
     // ! [nextvalidid]
     @Override
     public void nextValidId(int orderId) {
-        this.orderManagerService.setOrderId(orderId);
+        this.ordersManagerService.setOrderId(orderId);
     }
     // ! [nextvalidid]
 
@@ -378,6 +402,7 @@ public final class TWS implements EWrapper, TwsHandler {
                 + contract.currency() + "], [" + execution.execId() +
                 "], [" + execution.orderId() + "], [" + execution.shares() + "]" + ", [" + execution.lastLiquidity()
                 + "]");
+        this.ordersManagerService.execDetails(reqId, contract, execution);
     }
     // ! [execdetails]
 
@@ -516,6 +541,7 @@ public final class TWS implements EWrapper, TwsHandler {
     public void commissionReport(CommissionReport commissionReport) {
         log.info("CommissionReport. [" + commissionReport.execId() + "] - [" + commissionReport.commission() + "] ["
                 + commissionReport.currency() + "] RPNL [" + commissionReport.realizedPNL() + "]");
+        this.ordersManagerService.commissionReport(commissionReport);
     }
     // ! [commissionreport]
 
@@ -619,7 +645,7 @@ public final class TWS implements EWrapper, TwsHandler {
     public void securityDefinitionOptionalParameter(int reqId, String exchange, int underlyingConId,
             String tradingClass, String multiplier, Set<String> expirations, Set<Double> strikes) {
 
-        ContractHolder underlyingContractHolder = contractRepository.findById(underlyingConId).orElseGet(() -> {
+        ContractHolder underlyingContractHolder = contractRepository.findByConid(underlyingConId).orElseGet(() -> {
             TwsResultHolder<ContractHolder> holder = requestContractByConid(underlyingConId);
             return holder.getResult();
         });
@@ -643,11 +669,15 @@ public final class TWS implements EWrapper, TwsHandler {
     // ! [securityDefinitionOptionParameterEnd]
     @Override
     public void securityDefinitionOptionalParameterEnd(int reqId) {
-        ContractHolder underlying = contractRepository.findContractHolderByOptionChainRequestId(reqId);
-        if (underlying != null && !CollectionUtils.isEmpty(underlying.getOptionChain())) {
-            twsResultHandler.setResult(reqId, new TwsResultHolder<>(underlying.getOptionChain()));
-        }
-        log.debug("Option chain retrieved: {}", underlying.getOptionChain());
+
+        contractRepository.findByOptionChainRequestId(reqId).ifPresent(underlying -> {
+            if (!CollectionUtils.isEmpty(underlying.getOptionChain()))
+                twsResultHandler.setResult(reqId, new TwsResultHolder<>(underlying.getOptionChain()));
+            log.debug("Option chain retrieved: {}", underlying.getOptionChain());
+        });
+
+        // Code to execute if the contract is not found
+        log.debug("Not found");
     }
     // ! [securityDefinitionOptionParameterEnd]
 

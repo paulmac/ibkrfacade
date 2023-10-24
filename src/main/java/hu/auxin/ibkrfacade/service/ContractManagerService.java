@@ -13,13 +13,12 @@ import com.ib.client.Contract;
 import com.ib.client.ContractDetails;
 import com.ib.client.TickType;
 
-import hu.auxin.ibkrfacade.TWS;
-import hu.auxin.ibkrfacade.TwsResultHolder;
-import hu.auxin.ibkrfacade.data.ContractRepository;
-import hu.auxin.ibkrfacade.data.TimeSeriesHandler;
-import hu.auxin.ibkrfacade.data.holder.ContractHolder;
-import hu.auxin.ibkrfacade.data.holder.Option;
-import hu.auxin.ibkrfacade.data.holder.PriceHolder;
+import hu.auxin.ibkrfacade.models.PriceHolder;
+import hu.auxin.ibkrfacade.models.TwsResultHolder;
+import hu.auxin.ibkrfacade.models.hashes.ContractHolder;
+import hu.auxin.ibkrfacade.models.json.Option;
+import hu.auxin.ibkrfacade.repositories.hashes.ContractRepository;
+import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -33,13 +32,9 @@ import redis.clients.jedis.timeseries.TSElement;
 @Data
 @Slf4j
 @Service
-// @ConfigurationProperties(prefix = "contract.properties.conid.eur")
 @DependsOn("TWS")
 @Scope("singleton")
 public class ContractManagerService {
-
-    // @NonNull
-    // private Properties props;
 
     @NonNull
     private TWS tws;
@@ -49,14 +44,6 @@ public class ContractManagerService {
 
     @NonNull
     private final ContractRepository contractRepository;
-
-    // public void printProperties() {
-    // if (props != null) {
-    // props.forEach((key, value) -> log.info(key + "=" + value));
-    // } else {
-    // log.info("Properties not loaded.");
-    // }
-    // }
 
     public List<Contract> searchContract(String search) {
         TwsResultHolder resultHolder = tws.searchContract(search);
@@ -88,8 +75,8 @@ public class ContractManagerService {
      * @param conid
      * @return
      */
-    public PriceHolder getLastPriceByConid(int conid) {
-        ContractHolder contractHolder = contractRepository.findById(conid)
+    public PriceHolder getLastPriceByConid(Integer conid) {
+        ContractHolder contractHolder = contractRepository.findByConid(conid)
                 .orElseThrow(() -> new RuntimeException("No conid found"));
         return getLastPriceByContractHolder(contractHolder);
     }
@@ -101,7 +88,7 @@ public class ContractManagerService {
      * @return
      */
     public PriceHolder getLastPriceByContract(Contract contract) {
-        ContractHolder contractHolder = contractRepository.findById(contract.conid())
+        ContractHolder contractHolder = contractRepository.findByConid(contract.conid())
                 .orElseThrow(() -> new RuntimeException("No Contract found"));
         return getLastPriceByContractHolder(contractHolder);
     }
@@ -112,7 +99,7 @@ public class ContractManagerService {
      * @param underlyingConid
      * @return
      */
-    public Collection<Option> getOptionChainByConid(int underlyingConid) {
+    public Collection<Option> getOptionChainByConid(Integer underlyingConid) {
         ContractHolder underlying = getContractHolder(underlyingConid);
         return tws.requestForOptionChain(underlying.getContract());
     }
@@ -135,7 +122,7 @@ public class ContractManagerService {
      * Checking in Redis if the requested Contract already has a data stream.
      * If so, return with the already stored ContractHolder instead of creating a
      * new one.
-     * 
+     *
      * @param contract
      * @return
      */
@@ -147,12 +134,12 @@ public class ContractManagerService {
      * Checking in Redis if the requested Contract already has a data stream.
      * If so, return with the already stored ContractHolder instead of creating a
      * new one.
-     * 
+     *
      * @param conid
      * @return
      */
-    public ContractHolder getContractHolder(int conid) {
-        Optional<ContractHolder> contractHolder = contractRepository.findById(conid);
+    public ContractHolder getContractHolder(Integer conid) {
+        Optional<ContractHolder> contractHolder = contractRepository.findByConid(conid);
         return contractHolder.orElseGet(() -> {
             TwsResultHolder<ContractHolder> twsResult = tws.requestContractByConid(conid);
             if (!StringUtils.hasLength(twsResult.getError())) {
@@ -161,5 +148,10 @@ public class ContractManagerService {
             }
             throw new RuntimeException(twsResult.getError());
         });
+    }
+
+    @PostConstruct
+    void init() {
+        log.info("🚀 ✅ Initialized {} ", this.getClass().getName());
     }
 }

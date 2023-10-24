@@ -1,4 +1,4 @@
-package hu.auxin.ibkrfacade;
+package hu.auxin.ibkrfacade.controllers;
 
 import java.math.BigDecimal;
 import java.util.Collection;
@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -19,11 +20,11 @@ import org.springframework.web.server.ResponseStatusException;
 import com.ib.client.Contract;
 import com.ib.client.Types;
 
-import hu.auxin.ibkrfacade.data.holder.ContractHolder;
-import hu.auxin.ibkrfacade.data.holder.Option;
-import hu.auxin.ibkrfacade.data.holder.OrderHolder;
-import hu.auxin.ibkrfacade.data.holder.PositionHolder;
-import hu.auxin.ibkrfacade.data.holder.PriceHolder;
+import hu.auxin.ibkrfacade.models.PositionHolder;
+import hu.auxin.ibkrfacade.models.PriceHolder;
+import hu.auxin.ibkrfacade.models.hashes.ContractHolder;
+import hu.auxin.ibkrfacade.models.hashes.OrderHolder;
+import hu.auxin.ibkrfacade.models.json.Option;
 import hu.auxin.ibkrfacade.service.ContractManagerService;
 import hu.auxin.ibkrfacade.service.OrderManagerService;
 import hu.auxin.ibkrfacade.service.PositionManagerService;
@@ -40,8 +41,9 @@ import lombok.extern.slf4j.Slf4j;
 @Data
 @Slf4j
 @RestController
-@DependsOn("TWS")
-public class WebHandler {
+@DependsOn("contractManagerService")
+@RequestMapping("/tws/")
+public class TwsController {
 
     @NonNull
     private ContractManagerService contractManagerService;
@@ -63,12 +65,17 @@ public class WebHandler {
     @GetMapping("/connect")
     void connect(@RequestParam String platform) {
         try {
-            contractManagerService.getTws().reconnect(platform);
+            contractManagerService.getTws().connect(platform);
         } catch (InterruptedException e) {
             log.error("Can't Connect : " + platform, e);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Can't Connect : " +
                     platform);
         }
+    }
+
+    @GetMapping("/disconnect")
+    void disconnect() throws Exception {
+        contractManagerService.getTws().disconnect();
     }
 
     @Operation(summary = "Search for an instrument by it's ticker, or part of it's name.", parameters = {

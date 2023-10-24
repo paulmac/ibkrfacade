@@ -1,8 +1,9 @@
-package hu.auxin.ibkrfacade.data.holder;
+package hu.auxin.ibkrfacade.models.hashes;
 
 import com.ib.client.Contract;
 import com.ib.client.Order;
 import com.ib.client.OrderState;
+
 import io.swagger.v3.oas.annotations.ExternalDocumentation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;

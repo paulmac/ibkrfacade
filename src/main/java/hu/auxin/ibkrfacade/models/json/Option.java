@@ -1,6 +1,7 @@
-package hu.auxin.ibkrfacade.data.holder;
+package hu.auxin.ibkrfacade.models.json;
 
 import com.ib.client.Types;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;

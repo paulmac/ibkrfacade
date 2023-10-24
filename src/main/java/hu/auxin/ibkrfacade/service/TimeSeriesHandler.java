@@ -1,15 +1,14 @@
-package hu.auxin.ibkrfacade.data;
-
-import com.ib.client.Contract;
-import com.ib.client.TickType;
-
-import jakarta.validation.constraints.NotNull;
+package hu.auxin.ibkrfacade.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.stereotype.Component;
 
+import com.ib.client.Contract;
+import com.ib.client.TickType;
+
+import jakarta.validation.constraints.NotNull;
 import redis.clients.jedis.JedisPooled;
 import redis.clients.jedis.timeseries.DuplicatePolicy;
 import redis.clients.jedis.timeseries.TSCreateParams;

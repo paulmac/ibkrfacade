@@ -1,7 +1,9 @@
-package hu.auxin.ibkrfacade;
+package hu.auxin.ibkrfacade.service;
 
 import java.util.Map;
 import java.util.WeakHashMap;
+
+import hu.auxin.ibkrfacade.models.TwsResultHolder;
 
 public final class TwsResultHandler {
 
@@ -12,8 +14,8 @@ public final class TwsResultHandler {
     }
 
     public TwsResultHolder getResult(int requestId) {
-        //TODO not the most sophisticated wait mechanism
-        while(!results.containsKey(requestId)) {
+        // TODO not the most sophisticated wait mechanism
+        while (!results.containsKey(requestId)) {
             continue;
         }
         return results.get(requestId);

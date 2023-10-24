@@ -1,8 +1,8 @@
-package hu.auxin.ibkrfacade;
-
-import lombok.Getter;
+package hu.auxin.ibkrfacade.models;
 
 import java.io.Serializable;
+
+import lombok.Getter;
 
 /**
  * Holder class for results coming through TWS API.
@@ -29,7 +29,7 @@ public class TwsResultHolder<T extends Object> implements Serializable {
     private TwsResultHolder() {
     }
 
-    TwsResultHolder(T result) {
+    public TwsResultHolder(T result) {
         this.result = result;
     }
 

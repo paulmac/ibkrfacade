@@ -23,7 +23,7 @@ public class AsyncReaderService {
             readerSignal.waitForSignal();
             try {
                 reader.processMsgs();
-                log.info("msgs received");
+                // log.info("msgs received");
             } catch (Exception e) {
                 log.error(e.getMessage());
             }

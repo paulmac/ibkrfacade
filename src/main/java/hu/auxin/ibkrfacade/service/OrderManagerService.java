@@ -9,15 +9,22 @@ import java.util.stream.Collectors;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Service;
 
+import com.ib.client.CommissionReport;
 import com.ib.client.Contract;
 import com.ib.client.EClientSocket;
+import com.ib.client.Execution;
 import com.ib.client.Order;
 import com.ib.client.OrderState;
 import com.ib.client.Types;
 
-import hu.auxin.ibkrfacade.data.holder.OrderHolder;
-import hu.auxin.ibkrfacade.twssample.OrderSamples;
+import hu.auxin.ibkrfacade.models.OrderSamples;
+import hu.auxin.ibkrfacade.models.hashes.OrderHolder;
+import jakarta.annotation.PostConstruct;
+import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
+@Data
 @Service
 @Scope("singleton")
 public class OrderManagerService {
@@ -27,6 +34,8 @@ public class OrderManagerService {
     private Map<Integer, OrderHolder> orders = new HashMap<>();
 
     private EClientSocket client;
+
+    private ExecHandler execHandler;
 
     /**
      * Place an order on the market for a Contract
@@ -43,9 +52,11 @@ public class OrderManagerService {
         client.placeOrder(orderId++, contract, order);
     }
 
-    public void placeMarketOrder(Contract contract, Types.Action action, double quantity) {
+    public int placeMarketOrder(Contract contract, Types.Action action, double quantity) {
         Order order = OrderSamples.MarketOrder(action.getApiString(), quantity);
-        client.placeOrder(orderId++, contract, order);
+        order.orderId(orderId);
+        client.placeOrder(orderId, contract, order);
+        return orderId++;
     }
 
     public void placeStopLimitOrder(Contract contract, Types.Action action, double quantity, BigDecimal stopPrice,
@@ -53,6 +64,14 @@ public class OrderManagerService {
         Order order = OrderSamples.StopLimit(action.getApiString(), quantity, limitPrice.doubleValue(),
                 stopPrice.doubleValue());
         client.placeOrder(orderId++, contract, order);
+    }
+
+    public void execDetails(int reqId, Contract contract, Execution execution) {
+        execHandler.execDetails(reqId, contract, execution);
+    }
+
+    public void commissionReport(CommissionReport commissionReport) {
+        execHandler.commissionReport(commissionReport);
     }
 
     /**
@@ -110,11 +129,14 @@ public class OrderManagerService {
                 .collect(Collectors.toList());
     }
 
-    public void setOrderId(int orderId) {
-        this.orderId = orderId;
+    @PostConstruct
+    void init() {
+        log.info("🚀 ✅ Initialized {} ", this.getClass().getName());
     }
 
-    public void setClient(EClientSocket client) {
-        this.client = client;
-    }
+    // void setExecHandler(ExecHandler eHandler) {
+    // this.execHandler = eHandler;
+    // eHandler.setAccountId(this.client.)
+
+    // }
 }

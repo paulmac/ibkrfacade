@@ -1,11 +1,13 @@
-package hu.auxin.ibkrfacade.data.holder;
-
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import io.swagger.v3.oas.annotations.media.Schema;
-import lombok.Data;
-import org.springframework.data.annotation.Id;
+package hu.auxin.ibkrfacade.models;
 
 import java.io.Serializable;
+
+import org.springframework.data.annotation.Id;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Data;
 
 @Schema(description = "Represents a bid/ask pair.")
 @Data
