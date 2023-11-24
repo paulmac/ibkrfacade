@@ -3,7 +3,6 @@ package hu.auxin.ibkrfacade.controllers;
 import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.DependsOn;
@@ -18,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.ib.client.Contract;
+import com.ib.client.ContractDetails;
 import com.ib.client.Types;
 
 import hu.auxin.ibkrfacade.models.PositionHolder;
@@ -26,6 +26,7 @@ import hu.auxin.ibkrfacade.models.hashes.ContractHolder;
 import hu.auxin.ibkrfacade.models.hashes.OrderHolder;
 import hu.auxin.ibkrfacade.models.json.Option;
 import hu.auxin.ibkrfacade.service.ContractManagerService;
+import hu.auxin.ibkrfacade.service.ExecHandler;
 import hu.auxin.ibkrfacade.service.OrderManagerService;
 import hu.auxin.ibkrfacade.service.PositionManagerService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -43,7 +44,7 @@ import lombok.extern.slf4j.Slf4j;
 @RestController
 @DependsOn("contractManagerService")
 @RequestMapping("/tws/")
-public class TwsController {
+public class TwsController implements ExecHandler {
 
     @NonNull
     private ContractManagerService contractManagerService;
@@ -84,12 +85,15 @@ public class TwsController {
                     @ExampleObject(name = "Company name", value = "Apple")
             })
     })
+
     @GetMapping("/search")
-    List<ContractHolder> searchContract(@RequestParam String query) {
-        // contractManagerService.printProperties();
-        return contractManagerService.searchContract(query).stream()
-                .map(ContractHolder::new)
-                .collect(Collectors.toList());
+    List<Contract> searchContract(@RequestParam String query) {
+        return contractManagerService.searchContract(query);
+    }
+
+    @GetMapping("/details")
+    ContractDetails details(@RequestParam Contract con) {
+        return contractManagerService.getContractDetails(con);
     }
 
     @Operation(summary = "Subscribes to an instrument by it's conid. Subscription means the TWS starts streaming the market data for the instrument which will be saved into Redis TimeSeries", parameters = {
@@ -116,16 +120,16 @@ public class TwsController {
             @Parameter(name = "price", description = "Price value")
     })
     @PostMapping("/lmt_order")
-    void placeLimitOrder(@RequestParam int conid, @RequestParam String action, @RequestParam double quantity,
+    void placeLimitOrder(@RequestParam int conid, @RequestParam Types.Action action, @RequestParam double quantity,
             @RequestParam BigDecimal price) {
         Contract contract = contractManagerService.getContractHolder(conid).getContract();
-        orderManagerService.placeLimitOrder(contract, Types.Action.valueOf(action), quantity, price);
+        orderManagerService.placeLimitOrder(contract, action, quantity, price, this);
     }
 
     @PostMapping("/mkt_order")
-    void placeMarketOrder(@RequestParam int conid, @RequestParam String action, @RequestParam double quantity) {
+    void placeMarketOrder(@RequestParam int conid, @RequestParam Types.Action action, @RequestParam double quantity) {
         Contract contract = contractManagerService.getContractHolder(conid).getContract();
-        orderManagerService.placeMarketOrder(contract, Types.Action.valueOf(action), quantity);
+        orderManagerService.placeMarketOrder(contract, action, quantity, this);
     }
 
     @Operation(summary = "Returns with the list of orders.")
@@ -172,4 +176,5 @@ public class TwsController {
     Collection<Option> getOptionChain(@PathVariable int underlyingConid) {
         return contractManagerService.getOptionChainByConid(underlyingConid);
     }
+
 }

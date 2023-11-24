@@ -61,24 +61,6 @@ import redis.clients.jedis.exceptions.JedisDataException;
 @Scope("singleton")
 public final class TWS implements EWrapper, TwsHandler {
 
-    // public enum Platform {
-
-    // TWS_LIVE("TWS_LIVE"),
-    // TWS_PAPER("TWS_PAPER"),
-    // GW_LIVE("GW_LIVE"),
-    // GW_PAPER("GW_PAPER"),
-
-    // public final String pf;
-
-    // private Platform(String pf) {
-    // this.pf = pf;
-    // }
-
-    // public String getPf() {
-    // return pf;
-    // }
-    // }
-
     @Value("${ibkr.tws.host}")
     private String TWS_HOST;
 
@@ -152,13 +134,12 @@ public final class TWS implements EWrapper, TwsHandler {
         client.reqPositions(); // subscribe to positions
         client.reqAutoOpenOrders(true); // subscribe to order changes
         client.reqAllOpenOrders(); // initial request for open orders
-
         client.reqAccountSummary(GW_LIVE_PORT, TWS_HOST, GW_HOST);
+        client.reqIds(0);
         ordersManagerService.setClient(client);
     }
 
     public void connect(String platform) throws InterruptedException {
-
         if (client.isConnected())
             throw new InterruptedException("Client already Connected");
         this.platform = platform;
@@ -316,6 +297,7 @@ public final class TWS implements EWrapper, TwsHandler {
     public void orderStatus(int orderId, String status, double filled,
             double remaining, double avgFillPrice, int permId, int parentId,
             double lastFillPrice, int clientId, String whyHeld, double mktCapPrice) {
+        log.info("Order Status [{}] Status [{}] AvgFillPrice [{}]", orderId, status, avgFillPrice);
         ordersManagerService.changeOrderStatus(permId, status, filled, remaining, avgFillPrice, lastFillPrice);
     }
     // ! [orderstatus]
@@ -323,6 +305,7 @@ public final class TWS implements EWrapper, TwsHandler {
     // ! [openorder]
     @Override
     public void openOrder(int orderId, Contract contract, Order order, OrderState orderState) {
+        log.info("Order opened [{}] [{}] [{}]", orderId, contract.symbol(), contract.conid());
         ordersManagerService.setOrder(contract, order, orderState);
     }
     // ! [openorder]
@@ -372,6 +355,7 @@ public final class TWS implements EWrapper, TwsHandler {
     // ! [nextvalidid]
     @Override
     public void nextValidId(int orderId) {
+        log.info("Next Valid OrderId {}", orderId);
         this.ordersManagerService.setOrderId(orderId);
     }
     // ! [nextvalidid]
@@ -395,14 +379,16 @@ public final class TWS implements EWrapper, TwsHandler {
     }
     // ! [contractdetailsend]
 
-    // ! [execdetails]
+    // ! [execdetails] PMAC
     @Override
     public void execDetails(int reqId, Contract contract, Execution execution) {
-        log.info("ExecDetails. " + reqId + " - [" + contract.symbol() + "], [" + contract.secType() + "], ["
-                + contract.currency() + "], [" + execution.execId() +
-                "], [" + execution.orderId() + "], [" + execution.shares() + "]" + ", [" + execution.lastLiquidity()
-                + "]");
-        this.ordersManagerService.execDetails(reqId, contract, execution);
+        log.info(
+                "ExecDetails. reqId [{}] conid [{}] symbol [{}] localSymbol [{}] secType [{}] currency [{}] exchange [{}] orderId [{}] avgPrice [{}] quantity [{}] ",
+                reqId, contract.conid(), contract.symbol(), contract.localSymbol(), contract.secType(),
+                contract.currency(),
+                execution.exchange(),
+                execution.orderId(), execution.avgPrice(), execution.shares());
+        ordersManagerService.execDetails(reqId, contract, execution);
     }
     // ! [execdetails]
 
@@ -536,11 +522,13 @@ public final class TWS implements EWrapper, TwsHandler {
     }
     // ! [marketdatatype]
 
-    // ! [commissionreport]
+    // ! [commissionreport] PMCL
     @Override
     public void commissionReport(CommissionReport commissionReport) {
-        log.info("CommissionReport. [" + commissionReport.execId() + "] - [" + commissionReport.commission() + "] ["
-                + commissionReport.currency() + "] RPNL [" + commissionReport.realizedPNL() + "]");
+        log.info("CommissionReport; exec ID [{}] Commission [{}] Commission Currency [{}] PnL [{}] ",
+                commissionReport.execId(),
+                commissionReport.commission(),
+                commissionReport.currency(), commissionReport.realizedPNL());
         this.ordersManagerService.commissionReport(commissionReport);
     }
     // ! [commissionreport]
@@ -943,6 +931,7 @@ public final class TWS implements EWrapper, TwsHandler {
     public void error(int id, int errorCode, String errorMsg) {
         log.error("Error id: {}; Code: {}: {}", id, errorCode, errorMsg);
         twsResultHandler.setResult(id, new TwsResultHolder("Error code: " + errorCode + "; " + errorMsg));
+        this.ordersManagerService.error(id, errorCode, errorMsg);
     }
 
     // ! [error]
